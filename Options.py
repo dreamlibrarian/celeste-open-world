@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import random
 
-from Options import Choice, Range, DefaultOnToggle, Toggle, TextChoice, DeathLink, OptionGroup, PerGameCommonOptions, OptionError
+from Options import OptionSet, Choice, Range, DefaultOnToggle, Toggle, TextChoice, DeathLink, OptionGroup, PerGameCommonOptions, OptionError
 from worlds.AutoWorld import World
 
 
@@ -165,6 +165,13 @@ class IncludeFarewell(Choice):
     option_farewell = 2
     default = 0
 
+class IncludeASides(Toggle):
+    """
+    Determines whether the A-Side Levels will be included
+    """
+    display_name = "Include A-Sides"
+    default = 1
+
 class IncludeBSides(Toggle):
     """
     Determines whether the B-Side Levels will be included
@@ -176,6 +183,22 @@ class IncludeCSides(Toggle):
     Determines whether the C-Side Levels will be included
     """
     display_name = "Include C-Sides"
+
+class AdditionalLevels(OptionSet):
+    internal_name="additional_levels"
+    description="Additional Levels"
+    valid_keys= frozenset({"1b", "2b", "3b", "4b", "5b", "6b", "7b","1c", "2c", "3c", "4c", "5c", "6c", "7c","9c"})
+    preset_none= frozenset()
+    default=preset_none
+    preset_all= valid_keys
+
+class RoomsanityLevels(OptionSet):
+    internal_name="roomsanity_levels"
+    description="Roomsanity Levels"
+    valid_keys= frozenset({"0a", "1a", "2a", "3a", "4a", "5a", "6a", "7a", "8a", "1b", "2b", "3b", "4b", "5b", "6b", "7b","1c", "2c", "3c", "4c", "5c", "6c", "7c","9c", "10a", "10b", "10c"})
+    preset_none= frozenset()
+    preset_all= valid_keys
+    default=preset_all
 
 
 class DashShuffle(Choice):
@@ -520,12 +543,15 @@ celeste_option_groups = [
         Gemsanity,
         Carsanity,
         Roomsanity,
+        RoomsanityLevels,
         IncludeGoldens,
         GoldenAmnesty,
         IncludeCore,
         IncludeFarewell,
+        IncludeASides,
         IncludeBSides,
         IncludeCSides,
+        AdditionalLevels,
     ]),
     OptionGroup("Movement Options", [
         DashShuffle,
@@ -671,10 +697,13 @@ class CelesteOptions(PerGameCommonOptions):
     gemsanity: Gemsanity
     carsanity: Carsanity
     roomsanity: Roomsanity
+    roomsanity_levels: RoomsanityLevels
     include_goldens: IncludeGoldens
     golden_amnesty: GoldenAmnesty
     include_core: IncludeCore
     include_farewell: IncludeFarewell
+    additional_levels: AdditionalLevels
+    include_a_sides: IncludeASides
     include_b_sides: IncludeBSides
     include_c_sides: IncludeCSides
 

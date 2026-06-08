@@ -314,11 +314,12 @@ def create_regions_and_locations(world: CelesteOpenWorld):
                         menu_region.add_exits([room.checkpoint_region], {room.checkpoint_region: checkpoint_rule})
 
             if world.options.roomsanity:
-                if room.name != "10b_GOAL":
-                    room_location_name = room.display_name
-                    room_region.add_locations({
-                        room_location_name: world.location_name_to_id[room_location_name]
-                    }, CelesteLocation)
+                if level.name in world.options.roomsanity_levels:
+                    if room.name != "10b_GOAL":
+                        room_location_name = room.display_name
+                        room_region.add_locations({
+                            room_location_name: world.location_name_to_id[room_location_name]
+                        }, CelesteLocation)
 
         for room_connection in level.room_connections:
             source_region = world.get_region(room_connection.source.name)
