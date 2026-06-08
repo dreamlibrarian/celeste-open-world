@@ -76,7 +76,10 @@ class CelesteOpenWorld(World):
 
         self.goal_area: str = goal_area_option_to_name[self.options.goal_area.value]
 
-        self.active_levels = {"0a", "1a", "2a", "3a", "4a", "5a", "6a", "7a", "8a"}
+        # always include epilogue so we can goal out.
+        self.active_levels = {"8a"}
+        if self.options.include_a_sides:
+            self.active_levels.update({"0a", "1a", "2a", "3a", "4a", "5a", "6a", "7a"})
         if self.options.include_core:
             self.active_levels.add("9a")
         if self.options.include_farewell >= 1:
@@ -91,6 +94,10 @@ class CelesteOpenWorld(World):
             self.active_levels.update({"1c", "2c", "3c", "4c", "5c", "6c", "7c"})
             if self.options.include_core:
                 self.active_levels.add("9c")
+        
+        if self.options.additional_levels:
+            for level in self.options.additional_levels:
+                self.active_levels.add(str(level))
 
         if self.goal_area != "poetry":
             self.active_levels.add(self.goal_area)
@@ -510,8 +517,11 @@ class CelesteOpenWorld(World):
 
             "include_core": self.options.include_core.value,
             "include_farewell": self.options.include_farewell.value,
+            "include_a_sides": self.options.include_a_sides.value,
             "include_b_sides": self.options.include_b_sides.value,
             "include_c_sides": self.options.include_c_sides.value,
+            "additional_levels": self.options.additional_levels.value,
+            "roomsanity_levels": self.options.roomsanity_levels.value,
 
             "trap_expiration_action": self.options.trap_expiration_action.value,
             "trap_expiration_amount": self.options.trap_expiration_amount.value,
