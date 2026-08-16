@@ -268,6 +268,14 @@ class SplitInteractables(Choice):
     default = 0
 
 
+class PerAltitudeBoosters(Toggle):
+    """
+    Whether Summit A's Badeline Boosters unlock should be omitted from the item pool
+    so the boosters can be handled as altitude-specific progression instead.
+    """
+    display_name = "Per Altitude Boosters"
+
+
 class JunkFillPercentage(Range):
     """
     Replace a percentage of non-required Strawberries in the item pool with junk items
@@ -560,6 +568,7 @@ celeste_option_groups = [
     ]),
     OptionGroup("Item Options", [
         SplitInteractables,
+        PerAltitudeBoosters,
     ]),
     OptionGroup("Junk and Traps", [
         JunkFillPercentage,
@@ -671,6 +680,7 @@ class CelesteOptions(PerGameCommonOptions):
     crouch_shuffle: CrouchShuffle
 
     split_interactables: SplitInteractables
+    per_altitude_boosters: PerAltitudeBoosters
 
     junk_fill_percentage: JunkFillPercentage
     reduce_raspberries: ReduceRaspberries

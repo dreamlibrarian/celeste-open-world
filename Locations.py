@@ -135,8 +135,8 @@ def generate_location_table() -> dict[str, int]:
 def convert_item(world: CelesteOpenWorld, level: Level, item: str) -> str:
     converted_item = item
 
-    from .Items import interactable_item_data_table
-    if item in interactable_item_data_table:
+    from .Items import interactable_item_data_table, summit_a_altitude_booster_item_names
+    if item in interactable_item_data_table and item not in summit_a_altitude_booster_item_names:
         if world.options.split_interactables.value == 1:
             converted_item = level_id_to_name[level.name[:-1]] + " - " + item
         elif world.options.split_interactables.value == 2:
@@ -167,6 +167,19 @@ def convert_item_list_list(world: CelesteOpenWorld, level: Level, item_list_list
         converted_list_list.append(convert_item_list(world, level, item_list))
 
     return converted_list_list
+
+
+def apply_altitude_boosters(world: CelesteOpenWorld, room_name: str, possible_access: list[list[str]]) -> list[list[str]]:
+    if not world.options.per_altitude_boosters.value:
+        return possible_access
+
+    from .Items import summit_a_altitude_booster_name_for_room
+    altitude_item = summit_a_altitude_booster_name_for_room(room_name)
+    if altitude_item is None:
+        return possible_access
+
+    return [[altitude_item if item == ItemName.badeline_boosters else item for item in access]
+            for access in possible_access]
 
 
 def create_regions_and_locations(world: CelesteOpenWorld):
@@ -228,6 +241,8 @@ def create_regions_and_locations(world: CelesteOpenWorld):
                     if level_location.loc_type == LocationType.gem:
                         world.active_gem_names.append(level_location.display_name)
 
+                    active_possible_access = apply_altitude_boosters(world, room.name, active_possible_access)
+
                     location_rule = None
                     if len(active_possible_access) == 1:
                         only_access = convert_item_list(world, level, active_possible_access[0])
@@ -269,6 +284,8 @@ def create_regions_and_locations(world: CelesteOpenWorld):
                         active_possible_access = connection.possible_access_vanilla
                     elif world.options.logic_difficulty.value == 2:
                         active_possible_access = connection.possible_access_assist
+
+                    active_possible_access = apply_altitude_boosters(world, connection.source_name, active_possible_access)
 
                     connection_rule = None
                     if len(active_possible_access) == 1:

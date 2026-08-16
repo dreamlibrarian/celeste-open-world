@@ -109,23 +109,31 @@ class CelesteOpenWorld(World):
 
         self.active_items = set()
         for level in self.active_levels:
+            level_items = self.level_data[level].items.copy()
+            if self.options.per_altitude_boosters.value and level == "7a":
+                level_items.discard(ItemName.badeline_boosters)
+                from .Items import summit_a_altitude_sections, summit_a_altitude_booster_item_name
+                self.active_items.update(
+                    summit_a_altitude_booster_item_name(altitude) for altitude in summit_a_altitude_sections.values()
+                )
+
             if self.options.split_interactables.value == 0:
                 # None
-                self.active_items.update(self.level_data[level].items)
+                self.active_items.update(level_items)
             elif self.options.split_interactables.value == 1:
                 # Per-Level
-                for item in self.level_data[level].items:
+                for item in level_items:
                     self.active_items.add(level_id_to_name[level[:-1]] + " - " + item)
             elif self.options.split_interactables.value == 2:
                 # Per Side
-                for item in self.level_data[level].items:
+                for item in level_items:
                     if level[:-1] != "10":
                         self.active_items.add(level[-1].upper() + "-Side " + item)
                     else:
                         self.active_items.add("A-Side " + item)
             elif self.options.split_interactables.value == 3:
                 # Per Level and Side
-                for item in self.level_data[level].items:
+                for item in level_items:
                     if level[:-1] != "10":
                         self.active_items.add(level_id_to_name[level[:-1]] + " " + level[-1].upper() + " - " + item)
                     else:
@@ -504,6 +512,7 @@ class CelesteOpenWorld(World):
             "crouch_shuffle": self.options.crouch_shuffle.value,
 
             "split_interactables": self.options.split_interactables.value,
+            "per_altitude_boosters": self.options.per_altitude_boosters.value,
             "existent_interactables": [data.code for name, data in interactable_item_data_table.items() if name in self.active_items],
 
             "checkpointsanity": self.options.checkpointsanity.value,
