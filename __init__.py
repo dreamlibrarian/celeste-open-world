@@ -7,6 +7,7 @@ from Options import Option
 from rule_builder.rules import Has, And
 from Utils import visualize_regions
 from worlds.AutoWorld import WebWorld, World
+from worlds.generic.Rules import forbid_items_for_player
 
 from .Items import CelesteItem, generate_item_table, generate_item_data_table, generate_item_groups, level_cassette_items,\
                                 interactable_item_data_table, filler_item_data_table, cassette_item_data_table, crystal_heart_item_data_table, trap_item_data_table
@@ -275,7 +276,8 @@ class CelesteOpenWorld(World):
         item_pool: list[CelesteItem] = []
 
         location_count: int = len(self.get_locations())
-        goal_area_location_count: int = sum(goal_area_option_to_display_name[self.options.goal_area] in loc.name for loc in self.get_locations())
+        goal_area_locations: list[Location] = [loc for loc in self.get_locations() if goal_area_option_to_display_name[self.options.goal_area] in loc.name]
+        goal_area_location_count: int = len(goal_area_locations)
 
         # Goal Items
         goal_item_loc: Location = self.get_location(goal_area_to_location_name[self.goal_area])
@@ -351,6 +353,21 @@ class CelesteOpenWorld(World):
             self.active_items.discard("A-Side " + ItemName.yellow_torches)
 
         item_pool += [self.create_item(item_name) for item_name in sorted(self.active_items) if item_name not in self.multiworld.precollected_items[self.player]]
+
+        # When the Goal Area is locked behind a Strawberry count, every location inside it is
+        # only reachable after that count is met. Interactables and Strawberries are otherwise
+        # free to land anywhere, including inside the Goal Area, which can strand a copy needed
+        # to reach locations (or meet the count) outside the lock behind the same lock it's
+        # required to open. Keeping them out of the locked locations removes that deadlock
+        # potential entirely, since real_total_strawberries already reserves enough locations
+        # outside the lock to hold every Strawberry, and there are always far more locations
+        # outside the lock than interactables.
+        if self.options.lock_goal_area and goal_area_locations:
+            forbidden_in_goal_area = (self.active_items | {ItemName.strawberry}
+                                      | set(self.active_checkpoint_names) | set(self.active_key_names)
+                                      | set(self.active_gem_names))
+            for goal_area_location in goal_area_locations:
+                forbid_items_for_player(goal_area_location, forbidden_in_goal_area, self.player)
 
         # Movement
         if self.options.dash_shuffle.value == 0:
