@@ -405,7 +405,18 @@ class CelesteOpenWorld(World):
             self.multiworld.push_precollected(item_pool.pop())
 
         # Strawberries
-        real_total_strawberries: int = min(self.options.total_strawberries.value, location_count - goal_area_location_count - len(item_pool))
+        # location_count has already had every locked-item location (checkpoints, keys, gems,
+        # clutter, breaker boxes, the goal item) subtracted above, regardless of whether those
+        # locations are inside the Goal Area. goal_area_location_count is a static snapshot of
+        # ALL Goal Area locations taken before any of that locking happened, so subtracting it
+        # here as-is double-subtracts every Goal Area location that also got locked (which, with
+        # checkpointsanity/keysanity/gemsanity off, can be most or all of a small Goal Area) --
+        # this could drive real_total_strawberries, and therefore strawberries_required, negative,
+        # which makes every Has(Strawberry, count=strawberries_required) rule (the goal lock and
+        # the per-altitude booster events alike) trivially true and silently unlocks everything.
+        # Only the Goal Area locations still actually competing for a pool item should count here.
+        unlocked_goal_area_location_count: int = len([loc for loc in goal_area_locations if loc.item is None])
+        real_total_strawberries: int = max(0, min(self.options.total_strawberries.value, location_count - unlocked_goal_area_location_count - len(item_pool)))
         self.strawberries_required = int(real_total_strawberries * (self.options.strawberries_required_percentage / 100))
 
         menu_region = self.get_region("Menu")

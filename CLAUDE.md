@@ -168,6 +168,47 @@ pointed at the lock rather than at region/rule data). A full sweep across every 
 `split_interactables` × `lock_goal_area` × all sanity options (keysanity/gemsanity/checkpointsanity/
 carsanity/binosanity) on, 8 seeds each, is 0/640 failures after the fix.
 
+**Note:** the "sizing math already subtracts `goal_area_location_count`... to guarantee enough
+non-gated locations exist" claim above is about deadlock prevention specifically, and still holds
+for that purpose. It does *not* mean `real_total_strawberries` itself was ever correctly bounded —
+see the next section, a related but distinct bug in the same formula.
+
+## strawberries_required could go negative (fixed, same formula as above)
+
+`real_total_strawberries = min(total_strawberries, location_count - goal_area_location_count -
+len(item_pool))` (in `create_items`, the "Strawberries" section) could compute negative. Root
+cause: `goal_area_location_count` is a *static* snapshot of every location in the Goal Area, taken
+early (right after `create_regions`, before any locking happens). `location_count` by contrast
+starts as the total location count and gets decremented throughout `create_items` for every
+`place_locked_item`'d location (checkpoints/keys/gems/clutter/breaker boxes when their sanity
+option is off, plus the goal item) — including ones *inside* the Goal Area. Subtracting the static
+`goal_area_location_count` on top of that double-subtracts every Goal Area location that also got
+locked. With checkpointsanity/keysanity/gemsanity off (the defaults) and an active-level selection
+where the Goal Area is most or all of it, this reliably went negative.
+
+This matters far beyond the strawberry item count: `self.strawberries_required` feeds every
+`Has(Strawberry, count=strawberries_required)` rule in the world — the Goal Area lock, the
+Epilogue lock, and the `per_altitude_boosters` events (see above) all use it. A negative count
+makes `state.prog_items[...] >= negative_number` trivially true for *any* state, so this bug
+silently unlocked the Goal Area, the Epilogue, and every altitude-booster tier regardless of actual
+progress — the reported symptom was boosters/goal access unlocking "too easily," not a crash or
+generation failure, which is why it went unnoticed by the deadlock-focused sweep above (that sweep
+never checked whether `strawberries_required` itself was sane, only whether generation completed).
+
+**Fixed**: recompute the Goal-Area-locations term right before the `real_total_strawberries` line,
+counting only locations that are *still* pool-eligible at that point (`loc.item is None`) instead
+of the static early snapshot, and clamp the whole expression to `max(0, ...)` as a hard floor
+against any other edge case in the same formula. Regression test:
+`test/test_strawberries_required.py`, which sweeps Goal-Area-dominates-active-levels configs ×
+sanity-option combos × `total_strawberries`/`strawberries_required_percentage` values and asserts
+`strawberries_required` (and every `per_altitude_booster_thresholds` entry) is never negative.
+
+Repro that found it: `goal_area: "farewell"`, `include_farewell: "farewell"`,
+`include_a_sides: False`, `total_strawberries: 7`, `strawberries_required_percentage: 100` —
+active levels collapsed to almost entirely the Goal Area, giving `location_count=2`,
+`goal_area_location_count=17` (static), `len(item_pool)=2` at that point →
+`real_total_strawberries = min(7, 2 - 17 - 2) = -17`.
+
 ## Known pre-existing issues (not caused by recent work, don't re-diagnose from scratch)
 
 - `archipelago.json` currently defines a `version` key, which `test/general/test_world_manifest.py`
