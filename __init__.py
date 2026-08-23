@@ -7,6 +7,7 @@ from Options import Option
 from rule_builder.rules import Has, And
 from Utils import visualize_regions
 from worlds.AutoWorld import WebWorld, World
+from worlds.generic.Rules import forbid_items_for_player
 
 from .Items import CelesteItem, generate_item_table, generate_item_data_table, generate_item_groups, level_cassette_items,\
                                 interactable_item_data_table, filler_item_data_table, cassette_item_data_table, crystal_heart_item_data_table, trap_item_data_table
@@ -109,23 +110,27 @@ class CelesteOpenWorld(World):
 
         self.active_items = set()
         for level in self.active_levels:
+            level_items = self.level_data[level].items.copy()
+            if self.options.per_altitude_boosters.value and level == "7a":
+                level_items.discard(ItemName.badeline_boosters)
+
             if self.options.split_interactables.value == 0:
                 # None
-                self.active_items.update(self.level_data[level].items)
+                self.active_items.update(level_items)
             elif self.options.split_interactables.value == 1:
                 # Per-Level
-                for item in self.level_data[level].items:
+                for item in level_items:
                     self.active_items.add(level_id_to_name[level[:-1]] + " - " + item)
             elif self.options.split_interactables.value == 2:
                 # Per Side
-                for item in self.level_data[level].items:
+                for item in level_items:
                     if level[:-1] != "10":
                         self.active_items.add(level[-1].upper() + "-Side " + item)
                     else:
                         self.active_items.add("A-Side " + item)
             elif self.options.split_interactables.value == 3:
                 # Per Level and Side
-                for item in self.level_data[level].items:
+                for item in level_items:
                     if level[:-1] != "10":
                         self.active_items.add(level_id_to_name[level[:-1]] + " " + level[-1].upper() + " - " + item)
                     else:
@@ -267,7 +272,8 @@ class CelesteOpenWorld(World):
         item_pool: list[CelesteItem] = []
 
         location_count: int = len(self.get_locations())
-        goal_area_location_count: int = sum(goal_area_option_to_display_name[self.options.goal_area] in loc.name for loc in self.get_locations())
+        goal_area_locations: list[Location] = [loc for loc in self.get_locations() if goal_area_option_to_display_name[self.options.goal_area] in loc.name]
+        goal_area_location_count: int = len(goal_area_locations)
 
         # Goal Items
         goal_item_loc: Location = self.get_location(goal_area_to_location_name[self.goal_area])
@@ -344,6 +350,21 @@ class CelesteOpenWorld(World):
 
         item_pool += [self.create_item(item_name) for item_name in sorted(self.active_items) if item_name not in self.multiworld.precollected_items[self.player]]
 
+        # When the Goal Area is locked behind a Strawberry count, every location inside it is
+        # only reachable after that count is met. Interactables and Strawberries are otherwise
+        # free to land anywhere, including inside the Goal Area, which can strand a copy needed
+        # to reach locations (or meet the count) outside the lock behind the same lock it's
+        # required to open. Keeping them out of the locked locations removes that deadlock
+        # potential entirely, since real_total_strawberries already reserves enough locations
+        # outside the lock to hold every Strawberry, and there are always far more locations
+        # outside the lock than interactables.
+        if self.options.lock_goal_area and goal_area_locations:
+            forbidden_in_goal_area = (self.active_items | {ItemName.strawberry}
+                                      | set(self.active_checkpoint_names) | set(self.active_key_names)
+                                      | set(self.active_gem_names))
+            for goal_area_location in goal_area_locations:
+                forbid_items_for_player(goal_area_location, forbidden_in_goal_area, self.player)
+
         # Movement
         if self.options.dash_shuffle.value == 0:
             self.multiworld.push_precollected(self.create_item(ItemName.dash))
@@ -384,7 +405,18 @@ class CelesteOpenWorld(World):
             self.multiworld.push_precollected(item_pool.pop())
 
         # Strawberries
-        real_total_strawberries: int = min(self.options.total_strawberries.value, location_count - goal_area_location_count - len(item_pool))
+        # location_count has already had every locked-item location (checkpoints, keys, gems,
+        # clutter, breaker boxes, the goal item) subtracted above, regardless of whether those
+        # locations are inside the Goal Area. goal_area_location_count is a static snapshot of
+        # ALL Goal Area locations taken before any of that locking happened, so subtracting it
+        # here as-is double-subtracts every Goal Area location that also got locked (which, with
+        # checkpointsanity/keysanity/gemsanity off, can be most or all of a small Goal Area) --
+        # this could drive real_total_strawberries, and therefore strawberries_required, negative,
+        # which makes every Has(Strawberry, count=strawberries_required) rule (the goal lock and
+        # the per-altitude booster events alike) trivially true and silently unlocks everything.
+        # Only the Goal Area locations still actually competing for a pool item should count here.
+        unlocked_goal_area_location_count: int = len([loc for loc in goal_area_locations if loc.item is None])
+        real_total_strawberries: int = max(0, min(self.options.total_strawberries.value, location_count - unlocked_goal_area_location_count - len(item_pool)))
         self.strawberries_required = int(real_total_strawberries * (self.options.strawberries_required_percentage / 100))
 
         menu_region = self.get_region("Menu")
@@ -396,6 +428,23 @@ class CelesteOpenWorld(World):
                 menu_region.add_exits([region_name], {region_name: checkpoint_rule})
 
         menu_region.add_exits([self.epilogue_start_region], {self.epilogue_start_region: And(Has(ItemName.house_keys), Has(ItemName.strawberry, count=self.strawberries_required))})
+
+        # Per-altitude Badeline Boosters: granted as events once enough Strawberries are collected,
+        # rather than placed as real items in the pool. apply_altitude_boosters() (Locations.py)
+        # still gates room access on these item names via HasAll(...); only how the name enters
+        # state.prog_items changes, from a received network item to this event rule.
+        self.per_altitude_booster_thresholds: list[int] = []
+        if self.options.per_altitude_boosters.value:
+            from .Items import summit_a_altitude_sections, summit_a_altitude_booster_item_name
+            altitude_count = len(summit_a_altitude_sections)
+            for altitude_index, altitude in enumerate(summit_a_altitude_sections.values()):
+                threshold = math.ceil(self.strawberries_required * (altitude_index + 1) / altitude_count)
+                self.per_altitude_booster_thresholds.append(threshold)
+                event_name = summit_a_altitude_booster_item_name(altitude)
+                menu_region.add_locations({event_name: None}, CelesteLocation)
+                event_location = self.get_location(event_name)
+                event_location.place_locked_item(self.create_item(event_name))
+                self.set_rule(event_location, Has(ItemName.strawberry, count=threshold))
 
         item_pool += [self.create_item(ItemName.strawberry) for _ in range(self.strawberries_required)]
 
@@ -504,6 +553,8 @@ class CelesteOpenWorld(World):
             "crouch_shuffle": self.options.crouch_shuffle.value,
 
             "split_interactables": self.options.split_interactables.value,
+            "per_altitude_boosters": self.options.per_altitude_boosters.value,
+            "per_altitude_booster_thresholds": self.per_altitude_booster_thresholds,
             "existent_interactables": [data.code for name, data in interactable_item_data_table.items() if name in self.active_items],
 
             "checkpointsanity": self.options.checkpointsanity.value,

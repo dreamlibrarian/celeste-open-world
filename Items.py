@@ -161,6 +161,41 @@ interactable_item_data_table: dict[str, CelesteItemData] = {
     ItemName.seekers:       CelesteItemData(celeste_interactable_id + 0x1D, ItemClassification.progression),
 }
 
+# Summit A's rooms are grouped by prefix letter into the level's real in-game altitude checkpoints.
+# When per_altitude_boosters is enabled, the single Badeline Boosters item is replaced by one of
+# these per-section items, each granted as an event once enough Strawberries are collected (see
+# create_items()) rather than placed as a real item in the pool.
+summit_a_altitude_sections: dict[str, str] = {
+    "a": "Start",
+    "b": "500 M",
+    "c": "1000 M",
+    "d": "1500 M",
+    "e": "2000 M",
+    "f": "2500 M",
+    "g": "3000 M",
+}
+
+
+def summit_a_altitude_booster_item_name(altitude: str) -> str:
+    return f"{ItemName.badeline_boosters} ({altitude})"
+
+
+summit_a_altitude_booster_item_names: set[str] = {
+    summit_a_altitude_booster_item_name(altitude) for altitude in summit_a_altitude_sections.values()
+}
+
+
+def summit_a_altitude_booster_name_for_room(room_name: str) -> Optional[str]:
+    """Given a room or region name in Summit A (e.g. "7a_b-05" or "7a_b-05_top"), return the
+    altitude-specific Badeline Boosters item name for that section, or None if room_name isn't a
+    Summit A room/region belonging to a known altitude section."""
+    if not room_name.startswith("7a_") or len(room_name) <= 3:
+        return None
+
+    altitude = summit_a_altitude_sections.get(room_name[3])
+    return summit_a_altitude_booster_item_name(altitude) if altitude is not None else None
+
+
 cassette_item_data_table: dict[str, CelesteItemData] = {
     ItemName.prologue_cassette: CelesteItemData(celeste_cassette_id + 0x00, ItemClassification.filler),
     ItemName.fc_a_cassette:     CelesteItemData(celeste_cassette_id + 0x01, ItemClassification.filler),
