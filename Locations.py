@@ -205,6 +205,20 @@ def create_regions_and_locations(world: CelesteOpenWorld):
         if level.name not in world.active_levels:
             continue
 
+        # When per_altitude_boosters is on, Summit A's own room-to-room access is already gated
+        # by Strawberry-count thresholds (see the per-altitude Badeline Boosters events in
+        # create_items). Additionally locking the level's entrance behind the full
+        # strawberries_required count via lock_goal_area would be redundant on top of that internal
+        # gating -- worse, it would make every altitude tier trivially unlocked simultaneously the
+        # moment you could even walk in, defeating the point of pacing them individually. So skip
+        # the lock_goal_area deferral for Summit A specifically in this combination and let it into
+        # the normal (checkpoint-item-only) wiring below instead, unlocking the entrance immediately.
+        goal_area_entrance_locked = (
+            world.options.lock_goal_area
+            and (level.name == world.goal_area or (level.name[:2] == world.goal_area[:2] == "10"))
+            and not (world.options.per_altitude_boosters.value and level.name == "7a")
+        )
+
         for room in level.rooms:
             room_region = Region(room.name + "_room", world.player, world.multiworld)
             world.multiworld.regions.append(room_region)
@@ -311,7 +325,7 @@ def create_regions_and_locations(world: CelesteOpenWorld):
 
             if room.checkpoint != None:
                 if room.checkpoint == "Start":
-                    if world.options.lock_goal_area and (level.name == world.goal_area or (level.name[:2] == world.goal_area[:2] == "10")):
+                    if goal_area_entrance_locked:
                         world.goal_start_region: str = room.checkpoint_region
                     elif level.name == "8a":
                         world.epilogue_start_region: str = room.checkpoint_region
@@ -325,7 +339,7 @@ def create_regions_and_locations(world: CelesteOpenWorld):
                         checkpoint_location_name: world.location_name_to_id[checkpoint_location_name]
                     }, CelesteLocation)
 
-                    if world.options.lock_goal_area and (level.name == world.goal_area or (level.name[:2] == world.goal_area[:2] == "10")):
+                    if goal_area_entrance_locked:
                         world.goal_checkpoint_names[room.checkpoint_region] = checkpoint_location_name
                     else:
                         menu_region.add_exits([room.checkpoint_region], {room.checkpoint_region: checkpoint_rule})
