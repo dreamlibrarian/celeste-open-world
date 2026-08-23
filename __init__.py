@@ -113,10 +113,6 @@ class CelesteOpenWorld(World):
             level_items = self.level_data[level].items.copy()
             if self.options.per_altitude_boosters.value and level == "7a":
                 level_items.discard(ItemName.badeline_boosters)
-                from .Items import summit_a_altitude_sections, summit_a_altitude_booster_item_name
-                self.active_items.update(
-                    summit_a_altitude_booster_item_name(altitude) for altitude in summit_a_altitude_sections.values()
-                )
 
             if self.options.split_interactables.value == 0:
                 # None
@@ -422,6 +418,23 @@ class CelesteOpenWorld(World):
 
         menu_region.add_exits([self.epilogue_start_region], {self.epilogue_start_region: And(Has(ItemName.house_keys), Has(ItemName.strawberry, count=self.strawberries_required))})
 
+        # Per-altitude Badeline Boosters: granted as events once enough Strawberries are collected,
+        # rather than placed as real items in the pool. apply_altitude_boosters() (Locations.py)
+        # still gates room access on these item names via HasAll(...); only how the name enters
+        # state.prog_items changes, from a received network item to this event rule.
+        self.per_altitude_booster_thresholds: list[int] = []
+        if self.options.per_altitude_boosters.value:
+            from .Items import summit_a_altitude_sections, summit_a_altitude_booster_item_name
+            altitude_count = len(summit_a_altitude_sections)
+            for altitude_index, altitude in enumerate(summit_a_altitude_sections.values()):
+                threshold = math.ceil(self.strawberries_required * (altitude_index + 1) / altitude_count)
+                self.per_altitude_booster_thresholds.append(threshold)
+                event_name = summit_a_altitude_booster_item_name(altitude)
+                menu_region.add_locations({event_name: None}, CelesteLocation)
+                event_location = self.get_location(event_name)
+                event_location.place_locked_item(self.create_item(event_name))
+                self.set_rule(event_location, Has(ItemName.strawberry, count=threshold))
+
         item_pool += [self.create_item(ItemName.strawberry) for _ in range(self.strawberries_required)]
 
         # Filler and Traps
@@ -530,6 +543,7 @@ class CelesteOpenWorld(World):
 
             "split_interactables": self.options.split_interactables.value,
             "per_altitude_boosters": self.options.per_altitude_boosters.value,
+            "per_altitude_booster_thresholds": self.per_altitude_booster_thresholds,
             "existent_interactables": [data.code for name, data in interactable_item_data_table.items() if name in self.active_items],
 
             "checkpointsanity": self.options.checkpointsanity.value,

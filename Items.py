@@ -163,8 +163,8 @@ interactable_item_data_table: dict[str, CelesteItemData] = {
 
 # Summit A's rooms are grouped by prefix letter into the level's real in-game altitude checkpoints.
 # When per_altitude_boosters is enabled, the single Badeline Boosters item is replaced by one of
-# these per-section items so that access to booster-gated rooms is tied to a real, monotonic item
-# instead of a synthetic rule.
+# these per-section items, each granted as an event once enough Strawberries are collected (see
+# create_items()) rather than placed as a real item in the pool.
 summit_a_altitude_sections: dict[str, str] = {
     "a": "Start",
     "b": "500 M",
@@ -183,11 +183,6 @@ def summit_a_altitude_booster_item_name(altitude: str) -> str:
 summit_a_altitude_booster_item_names: set[str] = {
     summit_a_altitude_booster_item_name(altitude) for altitude in summit_a_altitude_sections.values()
 }
-
-
-for _altitude_index, _altitude_name in enumerate(summit_a_altitude_sections.values()):
-    interactable_item_data_table[summit_a_altitude_booster_item_name(_altitude_name)] = \
-        CelesteItemData(celeste_interactable_id + 0x25 + _altitude_index, ItemClassification.progression)
 
 
 def summit_a_altitude_booster_name_for_room(room_name: str) -> Optional[str]:
